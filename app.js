@@ -10,7 +10,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.3.1';
+  const APP_VERSION = '1.3.3';
   const DEFAULT_ACCIDENT = { name: '현대해상', phone: '1588-5656' };
   const RELATIONS = ['배우자', '자녀', '부모', '형제자매', '기타'];
   const FONT_SIZES = [17, 20, 23];
@@ -1089,7 +1089,7 @@
           '2. 글 쓰는 칸 왼쪽의 ＋ 를 누릅니다\n' +
           '3. "파일"을 누릅니다\n' +
           '4. 맨 위에 있는 customer-backup 파일을 골라 보냅니다',
-        buttons: [{ label: '확인', value: true, kind: 'pri' }],
+        buttons: [{ label: '닫기', value: true, kind: 'pri' }],
       });
     } finally {
       backupBusy = false;
@@ -1692,7 +1692,23 @@
     if (S.customers.length) requestPersist();
     else if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then((p) => (S.persisted = p)).catch(() => {});
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      // 새 버전이 올라오면 자동으로 받아서 화면을 한 번 새로 고침
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || reloaded || draft) return; // 입력 중이면 새로 고치지 않음
+        reloaded = true;
+        location.reload();
+      });
+      navigator.serviceWorker
+        .register('sw.js', { updateViaCache: 'none' })
+        .then((reg) => {
+          reg.update().catch(() => {});
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) reg.update().catch(() => {});
+          });
+        })
+        .catch(() => {});
     }
   }
 
