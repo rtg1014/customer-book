@@ -10,7 +10,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.2.2';
+  const APP_VERSION = '1.2.3';
   const DEFAULT_ACCIDENT = { name: '현대해상', phone: '1588-5656' };
   const RELATIONS = ['배우자', '자녀', '부모', '형제자매', '기타'];
   const FONT_SIZES = [17, 20, 23];
@@ -1078,7 +1078,7 @@
       const can = !!(navigator.share && (!navigator.canShare || navigator.canShare({ files: [csv] })));
       if (can) {
         try {
-          await navigator.share({ files: [csv], title: '고객수첩 백업' });
+          await navigator.share({ files: [csv] }); // 제목·글을 같이 넣으면 카톡이 글만 보내고 파일을 빼먹어서 파일만 보냄
           await markBackedUp();
           toast('백업 파일을 보냈습니다');
           return;
