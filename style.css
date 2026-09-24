@@ -418,3 +418,8 @@ dl.kv dd .badge { white-space: normal; }
 .c-car .badge { white-space: normal; }
 .banner.inapp { background: #fee2e2; color: #7f1d1d; }
 .banner.inapp button { background: #b91c1c; }
+.modal-back { z-index: 960; }
+.modal { max-height: calc(100dvh - 1.5rem); overflow-y: auto; }
+.copy span { word-break: keep-all; white-space: nowrap; }
+.copy.plain span { white-space: normal; }
+.copy.big { font-size: 1.15rem; }

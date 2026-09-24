@@ -1,6 +1,6 @@
 // 오프라인 동작용 서비스 워커.
 // 앱 파일을 고쳐서 다시 올릴 때는 아래 VERSION 숫자를 올려야 폰에 새 버전이 반영됩니다.
-const VERSION = 'v1.2.3';
+const VERSION = 'v1.3.0';
 const CACHE = 'customer-book-' + VERSION;
 const ASSETS = [
   './',

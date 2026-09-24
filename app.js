@@ -10,7 +10,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.2.3';
+  const APP_VERSION = '1.3.0';
   const DEFAULT_ACCIDENT = { name: '현대해상', phone: '1588-5656' };
   const RELATIONS = ['배우자', '자녀', '부모', '형제자매', '기타'];
   const FONT_SIZES = [17, 20, 23];
@@ -378,15 +378,18 @@
     return vals[0] ?? '';
   }
 
+  const fontCtl = () =>
+    `<div class="font-ctl" role="group" aria-label="글씨 크기">${[0, 1, 2]
+      .map((i) => `<button type="button" data-act="font" data-v="${i}" class="${i === S.font ? 'on' : ''}" aria-label="글씨 ${FONT_LABELS[i]}">가</button>`)
+      .join('')}</div>`;
+
   // ---------- 화면: 목록 ----------
   function renderShell() {
     applyFont();
     $('#app').innerHTML = `
       <header class="topbar">
         <h1>고객 수첩</h1><div class="grow"></div>
-        <div class="font-ctl" role="group" aria-label="글씨 크기">
-          ${[0, 1, 2].map((i) => `<button type="button" data-act="font" data-v="${i}" aria-label="글씨 ${FONT_LABELS[i]}">가</button>`).join('')}
-        </div>
+        ${fontCtl()}
         <button type="button" class="btn-top" data-act="settings" aria-label="설정">${ICON.gear}</button>
       </header>
       <div class="searchbar">
@@ -697,6 +700,7 @@
           <header class="topbar">
             <button type="button" class="btn-top" data-act="back">${ICON.back} 목록</button>
             <div class="grow"></div>
+            ${fontCtl()}
             <button type="button" class="btn-top solid" data-act="edit" data-id="${c.id}">수정</button>
           </header>
           <div class="screen-body">
@@ -921,8 +925,7 @@
             <div class="panel">
               <p class="help" style="margin-top:0">마지막 백업: <b>${S.lastBackup ? fmtTs(S.lastBackup) : '없음'}</b><br>백업 파일을 카톡 '나와의 채팅' 등에 보내 두면 폰을 바꿔도 되살릴 수 있습니다. 엑셀에서 열어 볼 수도 있어요.</p>
               <div class="btn-row">
-                <button type="button" class="btn pri" data-act="backup-share">카톡 등으로 보내기</button>
-                <button type="button" class="btn" data-act="backup">폰에 파일로 저장</button>
+                <button type="button" class="btn pri big block" data-act="backup">백업 파일 저장하고 카톡으로 보내기</button>
               </div>
               <div class="btn-row">
                 <button type="button" class="btn" data-act="import">백업·엑셀 파일 불러오기</button>
@@ -1036,7 +1039,9 @@
 
   function backupFile() {
     const blob = XlsxLite.write(buildSheets(false));
-    return new File([blob], `customer-backup_${isoDate(new Date())}.xlsx`, { type: blob.type });
+    const d = new Date();
+    const hm = `${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    return new File([blob], `customer-backup_${isoDate(d)}_${hm}.xlsx`, { type: blob.type });
   }
 
   function download(file) {
@@ -1057,50 +1062,31 @@
     refreshAll();
   }
 
-  // 공유용: 크롬(안드로이드)은 .xlsx 파일 공유를 막아서, 엑셀에서 그대로 열리는 .csv로 보냄
-  function backupCsvFile() {
-    const rows = buildSheets(false)[0].rows;
-    const cell = (v) => {
-      const t = v === null || v === undefined ? '' : String(v);
-      return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
-    };
-    const text = '\uFEFF' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
-    return new File([text], `고객수첩_백업_${isoDate(new Date())}.csv`, { type: 'text/csv' });
-  }
-
-  async function doBackup(share) {
+  // 크롬(안드로이드)은 웹페이지가 엑셀 파일을 바로 공유하는 것을 막아 둠.
+  // 그래서 폰에 엑셀 파일로 저장한 뒤, 카톡에서 그 파일을 첨부해 보내도록 안내함.
+  async function doBackup() {
     if (!S.customers.length) {
       toast('아직 저장된 고객이 없습니다');
       return;
     }
-    if (share) {
-      const csv = backupCsvFile();
-      const can = !!(navigator.share && (!navigator.canShare || navigator.canShare({ files: [csv] })));
-      if (can) {
-        try {
-          await navigator.share({ files: [csv] }); // 제목·글을 같이 넣으면 카톡이 글만 보내고 파일을 빼먹어서 파일만 보냄
-          await markBackedUp();
-          toast('백업 파일을 보냈습니다');
-          return;
-        } catch (e) {
-          if (e && e.name === 'AbortError') return; // 공유 창에서 취소
-        }
-      }
-      const ok = await confirmBox({
-        title: '이 화면에서는 바로 보내기가 안 됩니다',
-        body: IN_APP
-          ? '카카오톡 등 다른 앱 안에서 열린 화면이라 보내기를 쓸 수 없어요.\n홈 화면에 설치한 "고객수첩" 아이콘(또는 크롬)으로 열면 됩니다.\n\n대신 폰에 파일로 저장할까요?'
-          : '이 브라우저에서는 파일 보내기가 안 돼요.\n대신 폰의 "다운로드" 폴더에 저장할까요?',
-        buttons: [
-          { label: '폰에 파일로 저장', value: true, kind: 'pri' },
-          { label: '취소', value: false },
-        ],
-      });
-      if (!ok) return;
-    }
-    download(backupFile());
+    const file = backupFile();
+    download(file);
     await markBackedUp();
-    toast('폰의 "다운로드" 폴더에 백업 파일을 저장했습니다');
+    const go = await confirmBox({
+      title: '백업 파일을 폰에 저장했어요',
+      body:
+        `파일 이름: ${file.name}\n\n` +
+        '카톡으로 보내는 방법\n' +
+        '1. 카카오톡에서 "나와의 채팅"을 엽니다\n' +
+        '2. 글 쓰는 칸 왼쪽의 ＋ 를 누릅니다\n' +
+        '3. "파일"을 누릅니다\n' +
+        '4. 맨 위에 있는 customer-backup 파일을 골라 보냅니다',
+      buttons: [
+        { label: '카카오톡 열기', value: true, kind: 'pri' },
+        { label: '닫기', value: false },
+      ],
+    });
+    if (go) location.href = 'kakaotalk://';
   }
 
   function headerIndex(head) {
@@ -1495,7 +1481,7 @@
         $('#q').focus();
         break;
       case 'open':
-        openDetail(t.dataset.id, t.dataset.vid || null);
+        openDetail(t.dataset.id);
         break;
       case 'new':
         openEdit(null);
