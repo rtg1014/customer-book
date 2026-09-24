@@ -1,0 +1,6 @@
+.DS_Store
+# 고객 정보가 든 백업 파일은 절대 올리지 않기
+*.xlsx
+*.csv
+*.json
+!manifest.webmanifest
