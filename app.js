@@ -10,7 +10,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.2.0';
+  const APP_VERSION = '1.2.2';
   const DEFAULT_ACCIDENT = { name: '현대해상', phone: '1588-5656' };
   const RELATIONS = ['배우자', '자녀', '부모', '형제자매', '기타'];
   const FONT_SIZES = [17, 20, 23];
@@ -101,6 +101,18 @@
       } catch {}
     },
   };
+
+  // 카카오톡·네이버·인스타 등 다른 앱 안에서 열린 브라우저인지
+  const UA = navigator.userAgent || '';
+  const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|; wv\)/i.test(UA);
+  const IS_KAKAO = /KAKAOTALK/i.test(UA);
+  const IS_STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  function openInChrome() {
+    const url = location.href;
+    if (IS_KAKAO) location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+    else if (/Android/i.test(UA)) location.href = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+    else copyText(url);
+  }
 
   // ---------- 상태 ----------
   const S = {
@@ -396,6 +408,11 @@
         <span class="count" id="count"></span>
         <button type="button" class="chip" data-act="expiring" id="expiring">만기 임박만</button>
       </div>
+      ${
+        IN_APP && !IS_STANDALONE
+          ? `<div class="banner inapp"><span><b>카카오톡 안에서 열려 있어요.</b> 여기에 적은 고객 정보는 크롬이나 설치한 앱에서 보이지 않고, 백업·설치도 잘 안 됩니다. 크롬으로 열어서 쓰세요.</span><button type="button" data-act="open-chrome">크롬으로 열기</button></div>`
+          : ''
+      }
       <div id="banner"></div>
       <main id="results"></main>
       <button type="button" class="add-fab" data-act="new">${ICON.plus} 새 가입자 등록</button>
@@ -880,7 +897,6 @@
       render() {
         const vehCount = S.customers.reduce((s, c) => s + c.vehicles.length, 0);
         const famCount = S.customers.reduce((s, c) => s + c.family.length, 0);
-        const canShare = !!(navigator.canShare && window.File);
         this.el.innerHTML = `
           <header class="topbar">
             <button type="button" class="btn-top" data-act="back">${ICON.back} 목록</button>
@@ -905,8 +921,8 @@
             <div class="panel">
               <p class="help" style="margin-top:0">마지막 백업: <b>${S.lastBackup ? fmtTs(S.lastBackup) : '없음'}</b><br>백업 파일을 카톡 '나와의 채팅' 등에 보내 두면 폰을 바꿔도 되살릴 수 있습니다. 엑셀에서 열어 볼 수도 있어요.</p>
               <div class="btn-row">
-                ${canShare ? `<button type="button" class="btn pri" data-act="backup-share">카톡 등으로 보내기</button>` : ''}
-                <button type="button" class="btn ${canShare ? '' : 'pri'}" data-act="backup">폰에 파일로 저장</button>
+                <button type="button" class="btn pri" data-act="backup-share">카톡 등으로 보내기</button>
+                <button type="button" class="btn" data-act="backup">폰에 파일로 저장</button>
               </div>
               <div class="btn-row">
                 <button type="button" class="btn" data-act="import">백업·엑셀 파일 불러오기</button>
@@ -1041,26 +1057,48 @@
     refreshAll();
   }
 
+  // 공유용: 크롬(안드로이드)은 .xlsx 파일 공유를 막아서, 엑셀에서 그대로 열리는 .csv로 보냄
+  function backupCsvFile() {
+    const rows = buildSheets(false)[0].rows;
+    const cell = (v) => {
+      const t = v === null || v === undefined ? '' : String(v);
+      return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const text = '\uFEFF' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
+    return new File([text], `고객수첩_백업_${isoDate(new Date())}.csv`, { type: 'text/csv' });
+  }
+
   async function doBackup(share) {
     if (!S.customers.length) {
       toast('아직 저장된 고객이 없습니다');
       return;
     }
-    const file = backupFile();
-    if (share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: file.name });
-        await markBackedUp();
-        toast('백업 파일을 보냈습니다');
-      } catch (e) {
-        if (e && e.name === 'AbortError') return;
-        download(file);
-        await markBackedUp();
-        toast('보내기가 안 돼서 폰의 "다운로드" 폴더에 저장했습니다');
+    if (share) {
+      const csv = backupCsvFile();
+      const can = !!(navigator.share && (!navigator.canShare || navigator.canShare({ files: [csv] })));
+      if (can) {
+        try {
+          await navigator.share({ files: [csv], title: '고객수첩 백업' });
+          await markBackedUp();
+          toast('백업 파일을 보냈습니다');
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') return; // 공유 창에서 취소
+        }
       }
-      return;
+      const ok = await confirmBox({
+        title: '이 화면에서는 바로 보내기가 안 됩니다',
+        body: IN_APP
+          ? '카카오톡 등 다른 앱 안에서 열린 화면이라 보내기를 쓸 수 없어요.\n홈 화면에 설치한 "고객수첩" 아이콘(또는 크롬)으로 열면 됩니다.\n\n대신 폰에 파일로 저장할까요?'
+          : '이 브라우저에서는 파일 보내기가 안 돼요.\n대신 폰의 "다운로드" 폴더에 저장할까요?',
+        buttons: [
+          { label: '폰에 파일로 저장', value: true, kind: 'pri' },
+          { label: '취소', value: false },
+        ],
+      });
+      if (!ok) return;
     }
-    download(file);
+    download(backupFile());
     await markBackedUp();
     toast('폰의 "다운로드" 폴더에 백업 파일을 저장했습니다');
   }
@@ -1534,6 +1572,9 @@
         break;
       case 'backup':
         doBackup(false);
+        break;
+      case 'open-chrome':
+        openInChrome();
         break;
       case 'backup-share':
         doBackup(true);

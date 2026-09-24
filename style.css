@@ -416,3 +416,5 @@ dl.kv dd .badge { white-space: normal; }
 .th-plain { display: flex; align-items: center; min-height: 2.8rem; padding: 0 0.6rem; font-weight: 800; }
 .c-body { flex: 1 1 100%; min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .c-car .badge { white-space: normal; }
+.banner.inapp { background: #fee2e2; color: #7f1d1d; }
+.banner.inapp button { background: #b91c1c; }
