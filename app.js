@@ -10,7 +10,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.3.0';
+  const APP_VERSION = '1.3.1';
   const DEFAULT_ACCIDENT = { name: '현대해상', phone: '1588-5656' };
   const RELATIONS = ['배우자', '자녀', '부모', '형제자매', '기타'];
   const FONT_SIZES = [17, 20, 23];
@@ -925,7 +925,10 @@
             <div class="panel">
               <p class="help" style="margin-top:0">마지막 백업: <b>${S.lastBackup ? fmtTs(S.lastBackup) : '없음'}</b><br>백업 파일을 카톡 '나와의 채팅' 등에 보내 두면 폰을 바꿔도 되살릴 수 있습니다. 엑셀에서 열어 볼 수도 있어요.</p>
               <div class="btn-row">
-                <button type="button" class="btn pri big block" data-act="backup">백업 파일 저장하고 카톡으로 보내기</button>
+                <button type="button" class="btn pri big block" data-act="backup">백업 파일 저장하기</button>
+              </div>
+              <p class="help">저장한 뒤 카카오톡 '나와의 채팅' → ＋ → 파일에서 customer-backup 파일을 보내면 됩니다.</p>
+              <div class="btn-row" style="display:none">
               </div>
               <div class="btn-row">
                 <button type="button" class="btn" data-act="import">백업·엑셀 파일 불러오기</button>
@@ -1040,7 +1043,7 @@
   function backupFile() {
     const blob = XlsxLite.write(buildSheets(false));
     const d = new Date();
-    const hm = `${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    const hm = [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join('');
     return new File([blob], `customer-backup_${isoDate(d)}_${hm}.xlsx`, { type: blob.type });
   }
 
@@ -1063,30 +1066,34 @@
   }
 
   // 크롬(안드로이드)은 웹페이지가 엑셀 파일을 바로 공유하는 것을 막아 둠.
-  // 그래서 폰에 엑셀 파일로 저장한 뒤, 카톡에서 그 파일을 첨부해 보내도록 안내함.
+  // 그래서 먼저 폰에 엑셀 파일로 저장하고(크롬 다운로드 알림이 먼저 뜸),
+  // 잠시 뒤 카톡에서 그 파일을 첨부해 보내는 방법을 안내함.
+  let backupBusy = false;
   async function doBackup() {
+    if (backupBusy) return; // 두 번 눌러 같은 파일이 두 번 받아지는 것 방지
     if (!S.customers.length) {
       toast('아직 저장된 고객이 없습니다');
       return;
     }
-    const file = backupFile();
-    download(file);
-    await markBackedUp();
-    const go = await confirmBox({
-      title: '백업 파일을 폰에 저장했어요',
-      body:
-        `파일 이름: ${file.name}\n\n` +
-        '카톡으로 보내는 방법\n' +
-        '1. 카카오톡에서 "나와의 채팅"을 엽니다\n' +
-        '2. 글 쓰는 칸 왼쪽의 ＋ 를 누릅니다\n' +
-        '3. "파일"을 누릅니다\n' +
-        '4. 맨 위에 있는 customer-backup 파일을 골라 보냅니다',
-      buttons: [
-        { label: '카카오톡 열기', value: true, kind: 'pri' },
-        { label: '닫기', value: false },
-      ],
-    });
-    if (go) location.href = 'kakaotalk://';
+    backupBusy = true;
+    try {
+      const file = backupFile();
+      download(file);
+      await markBackedUp();
+      await new Promise((r) => setTimeout(r, 1500));
+      await confirmBox({
+        title: '카톡으로 보내는 방법',
+        body:
+          `백업 파일(${file.name})을 폰에 저장했어요.\n\n` +
+          '1. 카카오톡을 열고 "나와의 채팅"에 들어갑니다\n' +
+          '2. 글 쓰는 칸 왼쪽의 ＋ 를 누릅니다\n' +
+          '3. "파일"을 누릅니다\n' +
+          '4. 맨 위에 있는 customer-backup 파일을 골라 보냅니다',
+        buttons: [{ label: '확인', value: true, kind: 'pri' }],
+      });
+    } finally {
+      backupBusy = false;
+    }
   }
 
   function headerIndex(head) {
